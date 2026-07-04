@@ -21,8 +21,10 @@ mongoose.connect(mongoURI)
     .catch(err => console.error('Erreur de connexion à MongoDB :', err));
 
 // ==========================================
-// 2. MODÈLE DE DONNÉES ENRICHI (MongoDB)
+// 2. MODÈLES DE DONNÉES ENRICHIS (MongoDB)
 // ==========================================
+
+// Modèle des mesures de capteurs
 const sensorDataSchema = new mongoose.Schema({
     room: { type: String, required: true },
     temperature: { type: Number, required: true },
@@ -35,6 +37,18 @@ const sensorDataSchema = new mongoose.Schema({
 });
 
 const SensorData = mongoose.model('SensorData', sensorDataSchema, 'sensor_data');
+
+// Modèle du journal des alertes (Nouveau - requis pour les durées d'alertes)
+const alertLogSchema = new mongoose.Schema({
+    room: { type: String, required: true },
+    startTime: { type: Date, required: true },
+    endTime: { type: Date, default: null },
+    triggerTemperature: { type: Number, required: true },
+    triggerHumidity: { type: Number, required: true },
+    resolved: { type: Boolean, default: false }
+});
+
+const AlertLog = mongoose.model('AlertLog', alertLogSchema, 'alert_logs');
 
 // ==========================================
 // 3. ROUTE DE BASE POUR TESTER L'API
@@ -54,6 +68,7 @@ app.post('/api/data', async(req, res) => {
         const date = now.toISOString().split('T')[0];
         const time = now.toTimeString().split(' ')[0];
 
+        // 4.1 Sauvegarde de la mesure classique
         const newData = new SensorData({
             room,
             temperature,
@@ -64,9 +79,33 @@ app.post('/api/data', async(req, res) => {
             date,
             time
         });
-
         await newData.save();
-        res.status(201).json({ message: 'Mesure enregistrée avec succès', data: newData });
+
+        // 4.2 Gestion automatique du cycle de vie des alertes
+        if (status === 'Alerte') {
+            // Vérifier s'il y a déjà une alerte active non résolue pour cette salle
+            const activeAlert = await AlertLog.findOne({ room, resolved: false });
+            if (!activeAlert) {
+                // Début de la nouvelle alerte
+                const newAlert = new AlertLog({
+                    room,
+                    startTime: now,
+                    triggerTemperature: temperature,
+                    triggerHumidity: humidity
+                });
+                await newAlert.save();
+            }
+        } else if (status === 'Normal') {
+            // Si le statut revient à la normale, on clôture l'alerte active correspondante
+            const activeAlert = await AlertLog.findOne({ room, resolved: false });
+            if (activeAlert) {
+                activeAlert.endTime = now;
+                activeAlert.resolved = true;
+                await activeAlert.save();
+            }
+        }
+
+        res.status(201).json({ message: 'Mesure et états enregistrés avec succès', data: newData });
 
     } catch (error) {
         console.error("Erreur lors de l'enregistrement :", error);
@@ -75,7 +114,7 @@ app.post('/api/data', async(req, res) => {
 });
 
 // ==========================================
-// 5. ROUTE GET : RECUPE RER LA DERNIÈRE MESURE
+// 5. ROUTE GET : RECUPÉRER LA DERNIÈRE MESURE
 // ==========================================
 app.get('/api/data/latest', async(req, res) => {
     try {
@@ -88,7 +127,7 @@ app.get('/api/data/latest', async(req, res) => {
 });
 
 // ==========================================
-// 6. ROUTE GET : RECUPERER TOUTES LES MESURES
+// 6. ROUTE GET : RECUPÉRER TOUTES LES MESURES
 // ==========================================
 app.get('/api/data', async(req, res) => {
     try {
@@ -154,6 +193,18 @@ app.get('/api/data/history', async(req, res) => {
     } catch (error) {
         console.error("Erreur historique :", error);
         res.status(500).json({ error: "Erreur lors de la récupération de l'historique" });
+    }
+});
+
+// ==========================================
+// 8. ROUTE GET : RECUPÉRER LE JOURNAL DES ALERTES (Nouveau)
+// ==========================================
+app.get('/api/alerts', async(req, res) => {
+    try {
+        const alerts = await AlertLog.find().sort({ startTime: -1 });
+        res.json(alerts);
+    } catch (error) {
+        res.status(500).json({ error: "Erreur lors de la récupération du journal des alertes" });
     }
 });
 

@@ -121,11 +121,43 @@
             </div>
         </section>
 
+        <!-- Section 3: Historique Hebdomadaire (Nouveau) -->
+        <section>
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-400">Historique Hebdomadaire</h2>
+                <div class="flex items-center space-y-0 space-x-3">
+                    <label for="week-picker" class="text-sm text-gray-400">Choisir un jour de la semaine :</label>
+                    <input type="date" id="week-picker" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-teal-500">
+                </div>
+            </div>
+            <div class="bg-gray-800 border border-gray-700 rounded-2xl overflow-hidden shadow-sm">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-750 border-b border-gray-700 text-gray-400 uppercase text-xs tracking-wider">
+                            <th class="p-4">Date</th>
+                            <th class="p-4">Total Mesures</th>
+                            <th class="p-4">Moy. Température</th>
+                            <th class="p-4">Moy. Humidité</th>
+                            <th class="p-4">Alertes / Jour</th>
+                        </tr>
+                    </thead>
+                    <tbody id="weekly-table-body" class="divide-y divide-gray-700 text-sm">
+                        <tr>
+                            <td colspan="5" class="p-4 text-center text-gray-500">Sélectionnez une date pour charger la semaine.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
     </main>
 
     <script>
-        // MODIFICATION : Utilisation d'un chemin relatif pour cibler l'instance Cloud automatiquement
         const BASE_URL = '/api/data';
+        let lastMeasureTimestamp = null;
+
+        // Configuration par défaut de l'input date sur le jour actuel
+        document.getElementById('week-picker').value = new Date().toISOString().split('T')[0];
 
         async function fetchLatestData() {
             try {
@@ -138,6 +170,11 @@
                 document.getElementById('threshold-temp').innerText = data.seuilTemp;
                 document.getElementById('threshold-hum').innerText = data.seuilHum;
                 document.getElementById('last-update').innerText = `${data.date} à ${data.time}`;
+
+                // Stockage du timestamp pour la surveillance de la connexion
+                const [year, month, day] = data.date.split('-');
+                const [hour, min, sec] = data.time.split(':');
+                lastMeasureTimestamp = new Date(year, month - 1, day, hour, min, sec).getTime();
 
                 const banner = document.getElementById('global-alert-banner');
                 const statusText = document.getElementById('system-status-text');
@@ -158,13 +195,29 @@
                     indHum.className = 'absolute top-0 right-0 w-3 h-full bg-transparent';
                 }
 
-                document.getElementById('connection-status').className = "px-4 py-1.5 rounded-full text-sm font-semibold bg-green-500/20 text-green-400 border border-green-500/30";
-                document.getElementById('connection-status').innerText = "● Serveur Connecté";
+                checkHardwareConnection();
 
             } catch (error) {
                 console.error(error);
-                document.getElementById('connection-status').className = "px-4 py-1.5 rounded-full text-sm font-semibold bg-red-500/20 text-red-400 border border-red-500/30";
-                document.getElementById('connection-status').innerText = "Déconnecté";
+                document.getElementById('connection-status').className = "px-4 py-1.5 rounded-full text-sm font-semibold bg-red-500/20 text-red-400 border border-red-500/30 status-blink";
+                document.getElementById('connection-status').innerText = "Déconnecté du Serveur";
+            }
+        }
+
+        function checkHardwareConnection() {
+            if (!lastMeasureTimestamp) return;
+            const now = new Date().getTime();
+            const diffSeconds = (now - lastMeasureTimestamp) / 1000;
+
+            // Si aucune donnée reçue depuis plus de 30 secondes (ESP32 déconnecté)
+            if (diffSeconds > 30) {
+                document.getElementById('connection-status').className = "px-4 py-1.5 rounded-full text-sm font-semibold bg-red-600 text-white border border-red-700 status-blink";
+                document.getElementById('connection-status').innerText = "⚠️ Perte de connexion ESP32";
+                document.getElementById('system-status-text').innerText = "Inconnu";
+                document.getElementById('system-status-text').className = "text-3xl font-extrabold mt-2 text-gray-500";
+            } else {
+                document.getElementById('connection-status').className = "px-4 py-1.5 rounded-full text-sm font-semibold bg-green-500/20 text-green-400 border border-green-500/30";
+                document.getElementById('connection-status').innerText = "● Serveur & ESP32 Connectés";
             }
         }
 
@@ -176,8 +229,8 @@
                 const resData = await response.json();
 
                 const metrics = resData.metrics;
-                document.getElementById(`avg-temp-${period}`).innerText = metrics.count > 0 || metrics.averageTemperature > 0 ? metrics.averageTemperature : '--';
-                document.getElementById(`avg-hum-${period}`).innerText = metrics.count > 0 || metrics.averageHumidity > 0 ? metrics.averageHumidity : '--';
+                document.getElementById(`avg-temp-${period}`).innerText = metrics.count > 0 ? metrics.averageTemperature : '--';
+                document.getElementById(`avg-hum-${period}`).innerText = metrics.count > 0 ? metrics.averageHumidity : '--';
 
                 const alertBadge = document.getElementById(`alerts-${period}`);
                 alertBadge.innerText = metrics.alertsCount;
@@ -191,6 +244,78 @@
             }
         }
 
+        async function fetchWeeklyHistory() {
+            try {
+                const selectedDate = new Date(document.getElementById('week-picker').value);
+                if (isNaN(selectedDate)) return;
+
+                // Calcul du lundi et du dimanche de la semaine sélectionnée
+                const dayOfWeek = selectedDate.getDay();
+                const distanceToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+
+                const monday = new Date(selectedDate);
+                monday.setDate(selectedDate.getDate() + distanceToMonday);
+
+                const sunday = new Date(monday);
+                sunday.setDate(monday.getDate() + 6);
+
+                const startStr = monday.toISOString().split('T')[0];
+                const endStr = sunday.toISOString().split('T')[0];
+
+                const response = await fetch(`${BASE_URL}/history?start_date=${startStr}&end_date=${endStr}`);
+                if (!response.ok) throw new Error();
+                const resData = await response.json();
+
+                // Groupement des mesures reçues par jour calendaire
+                const groupedByDay = {};
+                for (let i = 0; i < 7; i++) {
+                    const currentDay = new Date(monday);
+                    currentDay.setDate(monday.getDate() + i);
+                    groupedByDay[currentDay.toISOString().split('T')[0]] = [];
+                }
+
+                resData.data.forEach(measure => {
+                    if (groupedByDay[measure.date]) {
+                        groupedByDay[measure.date].push(measure);
+                    }
+                });
+
+                const tbody = document.getElementById('weekly-table-body');
+                tbody.innerHTML = '';
+
+                Object.keys(groupedByDay).forEach(date => {
+                    const dayMeasures = groupedByDay[date];
+                    const count = dayMeasures.length;
+                    let avgT = '--',
+                        avgH = '--',
+                        alerts = 0;
+
+                    if (count > 0) {
+                        const sumT = dayMeasures.reduce((acc, m) => acc + m.temperature, 0);
+                        const sumH = dayMeasures.reduce((acc, m) => acc + m.humidity, 0);
+                        avgT = (sumT / count).toFixed(1) + '°C';
+                        avgH = (sumH / count).toFixed(1) + '%';
+                        alerts = dayMeasures.filter(m => m.status === 'Alerte').length;
+                    }
+
+                    const badgeClass = alerts > 0 ? "px-2.5 py-0.5 rounded-full font-bold bg-red-500/20 text-red-400 border border-red-500/30" : "px-2.5 py-0.5 rounded-full font-bold bg-gray-700 text-gray-300";
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-750/40">
+                            <td class="p-4 text-teal-400 font-medium">${date}</td>
+                            <td class="p-4 text-gray-400">${count}</td>
+                            <td class="p-4 text-orange-400">${avgT}</td>
+                            <td class="p-4 text-blue-400">${avgH}</td>
+                            <td class="p-4"><span class="${badgeClass}">${alerts}</span></td>
+                        </tr>
+                    `;
+                });
+
+            } catch (error) {
+                console.error("Erreur historique hebdomadaire :", error);
+            }
+        }
+
         function updateAll() {
             fetchLatestData();
             fetchPeriodHistory('matin');
@@ -198,8 +323,12 @@
             fetchPeriodHistory('nuit');
         }
 
+        // Événement de changement de date pour l'historique de la semaine
+        document.getElementById('week-picker').addEventListener('change', fetchWeeklyHistory);
+
         setInterval(updateAll, 5000);
         updateAll();
+        fetchWeeklyHistory();
     </script>
 </body>
 
