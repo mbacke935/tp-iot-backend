@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard IoT - Salle DAR-1</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .status-blink {
+            animation: blink 1.5s infinite;
+        }
+        
+        @keyframes blink {
+            0%,
+            100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.4;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 text-gray-100 font-sans min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 p-5 shadow-md">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold tracking-wide text-teal-400">Suivi Environnemental IoT</h1>
+            <div id="connection-status" class="px-4 py-1.5 rounded-full text-sm font-semibold bg-green-500/20 text-green-400 border border-green-500/30">
+                ● Serveur Connecté
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto p-6 space-y-8">
+
+        <!-- Alerte Globale -->
+        <div id="global-alert-banner" class="hidden bg-red-600 text-white p-4 rounded-xl font-bold flex items-center justify-between shadow-lg status-blink">
+            <span>⚠️ ALERTE ACTIVE : Un seuil critique a été dépassé dans la salle !</span>
+            <span class="text-xs bg-red-800 px-3 py-1 rounded-md">Buzzer Actif</span>
+        </div>
+
+        <!-- Section 1: Temps Réel -->
+        <section>
+            <h2 class="text-xl font-semibold mb-4 text-gray-400">Données en Temps Réel</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                <!-- Carte Température -->
+                <div class="bg-gray-800 border border-gray-700 p-6 rounded-2xl shadow-sm relative overflow-hidden">
+                    <p class="text-gray-400 font-medium uppercase tracking-wider text-sm">Température</p>
+                    <p class="text-5xl font-black mt-2 text-orange-400"><span id="rt-temp">--</span>°C</p>
+                    <p class="text-xs text-gray-500 mt-4">Seuil configuré : <span id="threshold-temp">--</span>°C</p>
+                    <div id="alert-indicator-temp" class="absolute top-0 right-0 w-3 h-full bg-transparent"></div>
+                </div>
+
+                <!-- Carte Humidité -->
+                <div class="bg-gray-800 border border-gray-700 p-6 rounded-2xl shadow-sm relative overflow-hidden">
+                    <p class="text-gray-400 font-medium uppercase tracking-wider text-sm">Humidité</p>
+                    <p class="text-5xl font-black mt-2 text-blue-400"><span id="rt-hum">--</span>%</p>
+                    <p class="text-xs text-gray-500 mt-4">Seuil configuré : <span id="threshold-hum">--</span>%</p>
+                    <div id="alert-indicator-hum" class="absolute top-0 right-0 w-3 h-full bg-transparent"></div>
+                </div>
+
+                <!-- Statut Général -->
+                <div id="status-card" class="bg-gray-800 border border-gray-700 p-6 rounded-2xl shadow-sm flex flex-col justify-between">
+                    <div>
+                        <p class="text-gray-400 font-medium uppercase tracking-wider text-sm">État du Système</p>
+                        <p id="system-status-text" class="text-3xl font-extrabold mt-2 text-green-400">Normal</p>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-4">Dernière mesure : <span id="last-update">--:--:--</span></p>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Section 2: Historiques Journaliers par Période -->
+        <section>
+            <h2 class="text-xl font-semibold mb-4 text-gray-400">Synthèse Journalière (Aujourd'hui)</h2>
+            <div class="bg-gray-800 border border-gray-700 rounded-2xl overflow-hidden shadow-sm">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-750 border-b border-gray-700 text-gray-400 uppercase text-xs tracking-wider">
+                            <th class="p-4">Période</th>
+                            <th class="p-4">Plage Horaire</th>
+                            <th class="p-4">Moy. Température</th>
+                            <th class="p-4">Moy. Humidité</th>
+                            <th class="p-4">Nombre d'Alertes</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-700 text-sm">
+                        <!-- Matin -->
+                        <tr>
+                            <td class="p-4 font-semibold text-teal-400">MATIN</td>
+                            <td class="p-4 text-gray-400">06:00 - 14:00</td>
+                            <td class="p-4"><span id="avg-temp-matin">--</span>°C</td>
+                            <td class="p-4"><span id="avg-hum-matin">--</span>%</td>
+                            <td class="p-4"><span id="alerts-matin" class="px-2.5 py-0.5 rounded-full font-bold bg-gray-700 text-gray-300">0</span></td>
+                        </tr>
+                        <!-- Soir -->
+                        <tr>
+                            <td class="p-4 font-semibold text-orange-400">SOIR</td>
+                            <td class="p-4 text-gray-400">14:00 - 22:00</td>
+                            <td class="p-4"><span id="avg-temp-soir">--</span>°C</td>
+                            <td class="p-4"><span id="avg-hum-soir">--</span>%</td>
+                            <td class="p-4"><span id="alerts-soir" class="px-2.5 py-0.5 rounded-full font-bold bg-gray-700 text-gray-300">0</span></td>
+                        </tr>
+                        <!-- Nuit -->
+                        <tr>
+                            <td class="p-4 font-semibold text-indigo-400">NUIT</td>
+                            <td class="p-4 text-gray-400">22:00 - 06:00</td>
+                            <td class="p-4"><span id="avg-temp-nuit">--</span>°C</td>
+                            <td class="p-4"><span id="avg-hum-nuit">--</span>%</td>
+                            <td class="p-4"><span id="alerts-nuit" class="px-2.5 py-0.5 rounded-full font-bold bg-gray-700 text-gray-300">0</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        const BASE_URL = 'http://172.20.10.2:3000/api/data';
+
+        async function fetchLatestData() {
+            try {
+                const response = await fetch(`${BASE_URL}/latest`);
+                if (!response.ok) throw new Error("Erreur API");
+                const data = await response.json();
+
+                document.getElementById('rt-temp').innerText = data.temperature;
+                document.getElementById('rt-hum').innerText = data.humidity;
+                document.getElementById('threshold-temp').innerText = data.seuilTemp;
+                document.getElementById('threshold-hum').innerText = data.seuilHum;
+                document.getElementById('last-update').innerText = `${data.date} à ${data.time}`;
+
+                const banner = document.getElementById('global-alert-banner');
+                const statusText = document.getElementById('system-status-text');
+                const indTemp = document.getElementById('alert-indicator-temp');
+                const indHum = document.getElementById('alert-indicator-hum');
+
+                if (data.status === 'Alerte') {
+                    banner.classList.remove('hidden');
+                    statusText.innerText = 'Alerte';
+                    statusText.className = 'text-3xl font-extrabold mt-2 text-red-500';
+                    indTemp.className = data.temperature > data.seuilTemp ? 'absolute top-0 right-0 w-3 h-full bg-red-600' : 'absolute top-0 right-0 w-3 h-full bg-transparent';
+                    indHum.className = data.humidity > data.seuilHum ? 'absolute top-0 right-0 w-3 h-full bg-red-600' : 'absolute top-0 right-0 w-3 h-full bg-transparent';
+                } else {
+                    banner.classList.add('hidden');
+                    statusText.innerText = 'Normal';
+                    statusText.className = 'text-3xl font-extrabold mt-2 text-green-400';
+                    indTemp.className = 'absolute top-0 right-0 w-3 h-full bg-transparent';
+                    indHum.className = 'absolute top-0 right-0 w-3 h-full bg-transparent';
+                }
+
+                document.getElementById('connection-status').className = "px-4 py-1.5 rounded-full text-sm font-semibold bg-green-500/20 text-green-400 border border-green-500/30";
+                document.getElementById('connection-status').innerText = "● Serveur Connecté";
+
+            } catch (error) {
+                console.error(error);
+                document.getElementById('connection-status').className = "px-4 py-1.5 rounded-full text-sm font-semibold bg-red-500/20 text-red-400 border border-red-500/30";
+                document.getElementById('connection-status').innerText = "Déconnecté";
+            }
+        }
+
+        async function fetchPeriodHistory(period) {
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                const response = await fetch(`${BASE_URL}/history?start_date=${today}&period=${period}`);
+                if (!response.ok) throw new Error();
+                const resData = await response.json();
+
+                const metrics = resData.metrics;
+                document.getElementById(`avg-temp-${period}`).innerText = metrics.count > 0 || metrics.averageTemperature > 0 ? metrics.averageTemperature : '--';
+                document.getElementById(`avg-hum-${period}`).innerText = metrics.count > 0 || metrics.averageHumidity > 0 ? metrics.averageHumidity : '--';
+
+                const alertBadge = document.getElementById(`alerts-${period}`);
+                alertBadge.innerText = metrics.alertsCount;
+                if (metrics.alertsCount > 0) {
+                    alertBadge.className = "px-2.5 py-0.5 rounded-full font-bold bg-red-500/20 text-red-400 border border-red-500/30";
+                } else {
+                    alertBadge.className = "px-2.5 py-0.5 rounded-full font-bold bg-gray-700 text-gray-300";
+                }
+            } catch (error) {
+                console.error(`Erreur historique ${period}:`, error);
+            }
+        }
+
+        function updateAll() {
+            fetchLatestData();
+            fetchPeriodHistory('matin');
+            fetchPeriodHistory('soir');
+            fetchPeriodHistory('nuit');
+        }
+
+        setInterval(updateAll, 5000);
+        updateAll();
+    </script>
+</body>
+
+</html>
