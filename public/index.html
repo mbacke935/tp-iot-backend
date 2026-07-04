@@ -124,7 +124,8 @@
     </main>
 
     <script>
-        const BASE_URL = 'http://172.20.10.2:3000/api/data';
+        // MODIFICATION : Utilisation d'un chemin relatif pour cibler l'instance Cloud automatiquement
+        const BASE_URL = '/api/data';
 
         async function fetchLatestData() {
             try {
